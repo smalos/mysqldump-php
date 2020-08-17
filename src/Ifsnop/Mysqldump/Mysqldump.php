@@ -35,6 +35,7 @@ class Mysqldump
     const MAXLINESIZE = 1000000;
 
     // List of available compression methods as constants.
+    const ZIP   = 'Zip';
     const GZIP  = 'Gzip';
     const BZIP2 = 'Bzip2';
     const NONE  = 'None';
@@ -1310,6 +1311,7 @@ abstract class CompressMethod
 {
     public static $enums = array(
         Mysqldump::NONE,
+        Mysqldump::ZIP,
         Mysqldump::GZIP,
         Mysqldump::BZIP2,
         Mysqldump::GZIPSTREAM,
@@ -1329,7 +1331,7 @@ abstract class CompressManagerFactory
 {
     /**
      * @param string $c
-     * @return CompressBzip2|CompressGzip|CompressNone
+     * @return CompressZip|CompressBzip2|CompressGzip|CompressNone
      */
     public static function create($c)
     {
@@ -1341,6 +1343,52 @@ abstract class CompressManagerFactory
         $method = __NAMESPACE__."\\"."Compress".$c;
 
         return new $method;
+    }
+}
+
+class CompressZip extends CompressManagerFactory
+{
+    private $fileHandler = null;
+    private $filenameOnly = null;
+
+    public function __construct()
+    {
+        if (!extension_loaded('zip')) {
+            throw new Exception("Compression is enabled, but zip lib is not installed or configured properly");
+        }
+    }
+
+    /**
+     * @param string $filename
+     */
+    public function open($filename)
+    {
+		
+		$this->fileHandler = new \ZipArchive;
+		$this->fileHandler->open($filename, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+		$this->$filenameOnly = pathinfo($filename)['filename'];
+	
+        if (false === $this->fileHandler) {
+            throw new Exception("Output file is not writable");
+        }
+
+        return true;
+    }
+
+    public function write($str)
+    {
+		
+	$bytesWritten = $this->fileHandler->addFromString($this->$filenameOnly, $str);
+		
+        if (false === $bytesWritten) {
+            throw new Exception("Writting to file failed! Probably, there is no more free space left?");
+        }
+        return $bytesWritten;
+    }
+
+    public function close()
+    {
+        return $this->fileHandler->close(); 
     }
 }
 
